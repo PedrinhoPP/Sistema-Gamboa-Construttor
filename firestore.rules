@@ -58,6 +58,25 @@ service cloud.firestore {
       allow write: if isMaster();
     }
 
+    // ---------- suporte / chamados ----------
+    match /tickets/{id} {
+      allow create: if isActiveMember(request.resource.data.tenantId)
+        && request.resource.data.authorEmail == request.auth.token.email
+        && request.resource.data.status == 'novo';
+      allow read: if isMaster()
+        || (hasProfile() && me().active == true
+            && (resource.data.authorEmail == request.auth.token.email
+                || (me().role == 'cadmin' && me().tenantId == resource.data.tenantId)));
+      // autor / administrador do cliente só respondem e marcam leitura; o geral altera tudo
+      allow update: if isMaster()
+        || (hasProfile() && me().active == true
+            && (resource.data.authorEmail == request.auth.token.email
+                || (me().role == 'cadmin' && me().tenantId == resource.data.tenantId))
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['respostas', 'updatedAt', 'naoLidoMaster', 'naoLidoCliente']));
+      allow delete: if isMaster();
+    }
+
     // ---------- registro de acessos ----------
     match /tenants/{t}/accesslog/{id} {
       allow create: if isActiveMember(t) && request.resource.data.email == request.auth.token.email;
