@@ -27,10 +27,10 @@ window.SCF_CONFIG = {
 Esses valores identificam o projeto e não são senha; quem protege os dados são as regras do passo 3.
 
 ## 6. Publicar no GitHub
-Envie para o repositório (substituindo os atuais): **index.html** (sistema do cliente), **admin.html** (Administração geral), **config.js**, **favicon.png** e os `.png`.
+Envie para o repositório (substituindo os atuais): **index.html** (sistema do cliente), **index.html** (Administração geral), **config.js**, **favicon.png** e os `.png`.
 
 ## 7. Criar o Administrador geral (faça logo, uma única vez)
-Abra `https://pedrinhopp.github.io/Sistema-Gamboa-Construttor/admin.html` → aparece **Primeiro acesso** → crie sua conta. Depois disso essa tela some para sempre.
+Abra `https://pedrinhopp.github.io/Sistema-Gamboa-Construttor/index.html` → aparece **Primeiro acesso** → crie sua conta. Depois disso essa tela some para sempre.
 Dentro dele: **Nova empresa** → informe a empresa, o administrador do cliente (e-mail e senha), o prazo do contrato e, se quiser, os produtos iniciais de pré-moldados. Clique em **Gerenciar** para cadastrar usuários, ver acessos, contrato e configurações.
 O cliente entra em `.../Sistema-Gamboa-Construttor/` (index.html) com o e-mail e a senha que você definiu.
 
@@ -43,4 +43,4 @@ O cliente entra em `.../Sistema-Gamboa-Construttor/` (index.html) com o e-mail e
 ## Observações
 - Redefinir senha de usuário no modo online é por **e-mail de redefinição** (o sistema envia o link).
 - Qualquer pessoa com a chave do app pode tentar criar conta no Firebase Auth, mas **sem perfil cadastrado pelo Administrador geral nenhum dado é lido** (as regras bloqueiam).
-- Para testar sem Firebase: acrescente `#/demo` ao endereço (dados só naquele navegador). Em `admin.html`, use `admin.html?app=master#/demo`.
+- Para testar sem Firebase: acrescente `#/demo` ao endereço (dados só naquele navegador). Em `index.html`, use `index.html?app=master#/demo`.
