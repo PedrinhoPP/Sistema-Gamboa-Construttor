@@ -58,6 +58,11 @@ service cloud.firestore {
       allow write: if isMaster();
     }
 
+    // ---------- configuração do Drive de backup (privada do Administrador geral) ----------
+    match /masterconfig/{id} {
+      allow read, write: if isMaster();
+    }
+
     // ---------- suporte / chamados ----------
     match /tickets/{id} {
       allow create: if isActiveMember(request.resource.data.tenantId)
