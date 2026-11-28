@@ -1,0 +1,93 @@
+rules_version = '2';
+// Regras do Firestore — o corte de acesso por contrato é IMPOSTO pelo servidor.
+//   profiles/{email}                 -> { role: master|cadmin|user, tenantId, active, name }
+//   tenants/{empresa}                -> contrato: { active, endAtMs, endDate, modules, name, adminEmail }
+//   tenants/{empresa}/{coleção}/{id} -> dados da empresa (clientes, cotações, catálogo...)
+//   meta/master                      -> marca que o Administrador geral já foi criado
+// Perfis: master = Administrador geral (controla todas as empresas) · cadmin = Administrador do cliente · user = Usuário.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null && request.auth.token.email != null; }
+    function profilePath() { return /databases/$(database)/documents/profiles/$(request.auth.token.email); }
+    function hasProfile() { return signedIn() && exists(profilePath()); }
+    function me() { return get(profilePath()).data; }
+    function metaMaster() { return /databases/$(database)/documents/meta/master; }
+
+    function isMaster() { return hasProfile() && me().role == 'master' && me().active == true; }
+    function isActiveMember(t) { return hasProfile() && me().active == true && me().tenantId == t && me().role in ['cadmin', 'user']; }
+
+    function tenantData(t) { return get(/databases/$(database)/documents/tenants/$(t)).data; }
+    // contrato em dia = empresa ativa (chave ligada) e dentro do prazo. Só o Administrador geral nunca é bloqueado.
+    function contractOk(t) {
+      return tenantData(t).active == true && request.time.toMillis() <= tenantData(t).endAtMs;
+    }
+    function inTenant(t) { return isActiveMember(t) && contractOk(t); }
+    function isManager(t) { return inTenant(t) && me().role == 'cadmin'; }
+    function sameTenantAdmin(tenantId) { return hasProfile() && me().role == 'cadmin' && me().active == true && me().tenantId == tenantId; }
+
+    // ---------- Primeiro Administrador geral (uma única vez) ----------
+    match /meta/master {
+      allow get: if true;
+      allow list: if false;
+      allow create: if signedIn() && !exists(metaMaster()) && request.resource.data.email == request.auth.token.email;
+      allow update, delete: if false;
+    }
+
+    // ---------- perfis ----------
+    match /profiles/{email} {
+      allow get: if signedIn() && (request.auth.token.email == email || isMaster() || sameTenantAdmin(resource.data.tenantId));
+      allow list: if isMaster() || sameTenantAdmin(resource.data.tenantId); // o Administrador do cliente só LÊ (usado no backup)
+
+      // Somente o Administrador geral cadastra perfis (administrador do cliente e usuários).
+      allow create: if isMaster()
+        || (signedIn() && request.auth.token.email == email
+            && request.resource.data.role == 'master' && request.resource.data.active == true
+            && !exists(metaMaster()) && existsAfter(metaMaster()) && getAfter(metaMaster()).data.email == email);
+
+      // cada pessoa informa o próprio e-mail do Google Drive (somente este campo)
+      allow update: if signedIn() && request.auth.token.email == email
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['driveEmail']);
+      allow update, delete: if isMaster();
+    }
+
+    // ---------- links antigos (compatibilidade) ----------
+    match /links/{token} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if isMaster();
+    }
+
+    // ---------- registro de acessos ----------
+    match /tenants/{t}/accesslog/{id} {
+      allow create: if isActiveMember(t) && request.resource.data.email == request.auth.token.email;
+      allow read: if isMaster() || sameTenantAdmin(t);
+      allow update, delete: if false;
+    }
+
+    // ---------- contrato (somente o Administrador geral altera) ----------
+    match /tenants/{t} {
+      // Membros leem o próprio contrato mesmo suspenso, para o app exibir o aviso correto.
+      allow get: if isMaster() || (hasProfile() && me().active == true && me().tenantId == t);
+      allow list: if isMaster();
+      allow write: if isMaster();
+    }
+
+    // ---------- dados da empresa ----------
+    match /tenants/{t}/{coll}/{docId} {
+      // custos (catalog) só o administrador do cliente lê; os usuários leem a lista de preços (pricelist), sem custo.
+      allow read: if isMaster()
+        || (inTenant(t) && coll in ['clients', 'quotes', 'pmquotes', 'equipment', 'pricelist', 'kv', 'catalog']
+            && (coll != 'catalog' || isManager(t)));
+
+      // administrador do cliente e usuários registram clientes e orçamentos
+      allow write: if isMaster() || (inTenant(t) && coll in ['clients', 'quotes', 'pmquotes']);
+
+      // custos, preços e equipamentos: administrador do cliente (e Administrador geral)
+      allow write: if isMaster() || (isManager(t) && coll in ['equipment', 'pricelist', 'catalog']);
+
+      // configurações (kv): somente o Administrador geral
+      allow write: if isMaster() && coll == 'kv';
+    }
+  }
+}
